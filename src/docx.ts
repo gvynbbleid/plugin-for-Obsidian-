@@ -1,24 +1,4 @@
-import {
-  Document,
-  Packer,
-  Paragraph,
-  TextRun,
-  HeadingLevel,
-  AlignmentType,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  ImageRun,
-  ExternalHyperlink,
-  PageBreak,
-  UnderlineType,
-  convertMillimetersToTwip,
-  Header,
-  Footer,
-  PageNumber,
-  PageOrientation,
-} from 'docx';
+import HTMLtoDOCX from 'html-to-docx';
 import { RenderResult, DocxConfig } from './type';
 import { safeParseFloat } from './utils';
 import { PageSize } from './constant';
@@ -35,848 +15,400 @@ export async function generateDocx(renderResult: RenderResult, options: DocxOpti
   const { doc, frontMatter, file } = renderResult;
   const { config, displayMetadata } = options;
 
-  const markdown = getMarkdownContent(doc);
+  console.log('[Export DOCX] Starting export for file:', file?.name ?? 'unknown');
+  console.log('[Export DOCX] Document title:', doc?.title);
+  console.log('[Export DOCX] Document has body:', !!doc?.body);
+
+  const htmlContent = getHtmlContent(doc, config);
+
+  console.log('[Export DOCX] HTML content length:', htmlContent.length);
+  console.log('[Export DOCX] HTML preview:', htmlContent.substring(0, 300));
+
+  if (!htmlContent || htmlContent.trim().length === 0) {
+    throw new Error('Empty HTML content - nothing to export');
+  }
+
   const { pageSize, orientation } = getPageSize(config);
   const margins = getMargins(config);
 
-  const children = parseMarkdown(markdown, config);
+  const headerEnabled = config.displayHeader;
+  const footerEnabled = config.displayFooter;
 
-  const headerContent = config.displayHeader
+  const headerContent = headerEnabled
     ? parseHeaderFooterTemplate(config.headerTemplate, frontMatter)
-    : '';
+    : '<p></p>';
 
-  const footerContent = config.displayFooter
+  const footerContent = footerEnabled
     ? parseHeaderFooterTemplate(config.footerTemplate, frontMatter)
-    : '';
+    : '<p></p>';
 
-  const docxDoc = new Document({
-    creator: displayMetadata
-      ? Array.isArray(frontMatter.author)
-        ? frontMatter.author.join(', ')
-        : (frontMatter.author ?? 'Unknown')
-      : 'Obsidian Export',
-    title: displayMetadata ? (frontMatter.title ?? doc.title) : doc.title,
-    description: displayMetadata ? frontMatter.subject : undefined,
-    keywords: displayMetadata
-      ? Array.isArray(frontMatter.keywords)
-        ? frontMatter.keywords.join(', ')
-        : frontMatter.keywords
-      : undefined,
-    styles: {
-      paragraphStyles: [
-        {
-          id: 'Normal',
-          name: 'Normal',
-          run: {
-            font: 'Calibri',
-            size: 22,
-          },
-        },
-        {
-          id: 'Heading1',
-          name: 'Heading 1',
-          basedOn: 'Normal',
-          next: 'Normal',
-          quickFormat: true,
-          run: {
-            font: 'Calibri',
-            size: 32,
-            bold: true,
-            color: '2E74B5',
-          },
-          paragraph: {
-            spacing: { before: 240, after: 120 },
-            outlineLevel: 0,
-          },
-        },
-        {
-          id: 'Heading2',
-          name: 'Heading 2',
-          basedOn: 'Normal',
-          next: 'Normal',
-          quickFormat: true,
-          run: {
-            font: 'Calibri',
-            size: 26,
-            bold: true,
-            color: '2E74B5',
-          },
-          paragraph: {
-            spacing: { before: 200, after: 100 },
-            outlineLevel: 1,
-          },
-        },
-        {
-          id: 'Heading3',
-          name: 'Heading 3',
-          basedOn: 'Normal',
-          next: 'Normal',
-          quickFormat: true,
-          run: {
-            font: 'Calibri',
-            size: 24,
-            bold: true,
-            color: '1F4E79',
-          },
-          paragraph: {
-            spacing: { before: 160, after: 80 },
-            outlineLevel: 2,
-          },
-        },
-        {
-          id: 'Heading4',
-          name: 'Heading 4',
-          basedOn: 'Normal',
-          next: 'Normal',
-          quickFormat: true,
-          run: {
-            font: 'Calibri',
-            size: 22,
-            bold: true,
-            color: '1F4E79',
-          },
-          paragraph: {
-            spacing: { before: 120, after: 60 },
-            outlineLevel: 3,
-          },
-        },
-        {
-          id: 'Heading5',
-          name: 'Heading 5',
-          basedOn: 'Normal',
-          next: 'Normal',
-          quickFormat: true,
-          run: {
-            font: 'Calibri',
-            size: 22,
-            bold: true,
-            italics: true,
-            color: '2E74B5',
-          },
-          paragraph: {
-            spacing: { before: 120, after: 60 },
-            outlineLevel: 4,
-          },
-        },
-        {
-          id: 'Heading6',
-          name: 'Heading 6',
-          basedOn: 'Normal',
-          next: 'Normal',
-          quickFormat: true,
-          run: {
-            font: 'Calibri',
-            size: 22,
-            italics: true,
-            color: '2E74B5',
-          },
-          paragraph: {
-            spacing: { before: 120, after: 60 },
-            outlineLevel: 5,
-          },
-        },
-        {
-          id: 'CodeBlock',
-          name: 'Code Block',
-          basedOn: 'Normal',
-          next: 'Normal',
-          run: {
-            font: 'Consolas',
-            size: 18,
-            color: '333333',
-          },
-          paragraph: {
-            spacing: { before: 60, after: 60 },
-            shading: {
-              type: 'clear',
-              fill: 'F5F5F5',
-            },
-          },
-        },
-        {
-          id: 'Quote',
-          name: 'Quote',
-          basedOn: 'Normal',
-          next: 'Normal',
-          run: {
-            font: 'Calibri',
-            size: 22,
-            italics: true,
-            color: '666666',
-          },
-          paragraph: {
-            indent: { left: convertMillimetersToTwip(10) },
-            spacing: { before: 60, after: 60 },
-          },
-        },
-      ],
-    },
-    sections: [
-      {
-        properties: {
-          page: {
-            size: {
-              width: pageSize.width,
-              height: pageSize.height,
-              orientation,
-            },
-            margin: {
-              top: margins.top,
-              bottom: margins.bottom,
-              left: margins.left,
-              right: margins.right,
-              header: margins.header,
-              footer: margins.footer,
-            },
-          },
-        },
-        headers: config.displayHeader
-          ? {
-              default: new Header({
-                children: [
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    children: parseInlineMarkdown(headerContent).map((run) => {
-                      if (run instanceof TextRun) {
-                        return new TextRun({
-                          ...run,
-                          size: 18,
-                          color: '666666',
-                        });
-                      }
-                      return run;
-                    }),
-                  }),
-                ],
-              }),
-            }
-          : undefined,
-        footers: config.displayFooter
-          ? {
-              default: new Footer({
-                children: [
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    children: [
-                      new TextRun({
-                        text: footerContent,
-                        size: 18,
-                        color: '666666',
-                      }),
-                      new TextRun({ text: '  ' }),
-                      new TextRun({
-                        children: [PageNumber.CURRENT],
-                        size: 18,
-                        color: '666666',
-                      }),
-                    ],
-                  }),
-                ],
-              }),
-            }
-          : undefined,
-        children,
-      },
-    ],
-  });
+  const header = `<div style="font-size:10px;color:#666;text-align:center;">${headerContent}</div>`;
+  const footer = `<div style="font-size:10px;color:#666;text-align:center;">${footerContent}</div>`;
 
-  const buffer = await Packer.toBuffer(docxDoc);
-  return buffer;
+  console.log('[Export DOCX] Calling HTMLtoDOCX...');
+
+  try {
+    const buffer = await HTMLtoDOCX(htmlContent, header, {
+      header: headerEnabled,
+      footer: footerEnabled,
+      table: { row: { cantSplit: false } },
+      pageNumber: footerEnabled,
+      pageSize,
+      orientation,
+      margins,
+      font: 'Calibri',
+      fontSize: 22,
+      title: displayMetadata ? frontMatter.title ?? doc.title : undefined,
+      subject: displayMetadata ? frontMatter.subject : undefined,
+      creator: displayMetadata
+        ? Array.isArray(frontMatter.author)
+          ? frontMatter.author.join(', ')
+          : frontMatter.author
+        : undefined,
+      keywords: displayMetadata
+        ? Array.isArray(frontMatter.keywords)
+          ? frontMatter.keywords.join(', ')
+          : frontMatter.keywords
+        : undefined
+    }, footer);
+
+    console.log('[Export DOCX] Buffer size:', buffer?.length ?? 0);
+    console.log('[Export DOCX] Buffer type:', buffer?.constructor?.name);
+
+    if (!buffer || buffer.length === 0) {
+      throw new Error('Generated buffer is empty');
+    }
+
+    return buffer;
+  } catch (error) {
+    console.error('[Export DOCX] Error during conversion:', error);
+    throw error;
+  }
 }
 
-function getMarkdownContent(doc: globalThis.Document): string {
+function getHtmlContent(doc: globalThis.Document, config: DocxConfig): string {
+  console.log('[Export DOCX] getHtmlContent - document body children:', doc?.body?.childNodes?.length);
+  console.log('[Export DOCX] getHtmlContent - document title:', doc?.title);
+
   const viewEl = doc.querySelector('.markdown-preview-view');
-  if (!viewEl) return '';
+  console.log('[Export DOCX] getHtmlContent - found .markdown-preview-view:', !!viewEl);
+
+  if (!viewEl) {
+    console.log('[Export DOCX] getHtmlContent - no .markdown-preview-view, returning fallback');
+    return '<p>No content found</p>';
+  }
 
   const clone = viewEl.cloneNode(true) as HTMLElement;
+  console.log('[Export DOCX] getHtmlContent - cloned HTML length:', clone.innerHTML.length);
+  console.log('[Export DOCX] getHtmlContent - clone HTML preview:', clone.innerHTML.substring(0, 300));
 
   const titleEl = clone.querySelector('h1.__title__');
-  if (titleEl) {
+  if (titleEl && !config.showTitle) {
     titleEl.remove();
   }
 
-  const anchors = clone.querySelectorAll('.md-print-anchor, .blockid');
-  anchors.forEach((el) => el.remove());
+  removeUnsupportedElements(clone);
+  cleanAttributes(clone);
+  fixInternalLinks(clone);
+  fixImages(clone);
+  fixTables(clone);
+  removeEmptyElements(clone);
 
-  return clone.innerHTML;
-}
+  const result = clone.innerHTML;
+  console.log('[Export DOCX] getHtmlContent - final HTML length:', result.length);
+  console.log('[Export DOCX] getHtmlContent - final HTML preview:', result.substring(0, 300));
 
-function parseMarkdown(html: string, config: DocxConfig): (Paragraph | Table)[] {
-  const children: (Paragraph | Table)[] = [];
-  const lines = html.split('\n');
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i].trim();
-
-    if (!line) {
-      i++;
-      continue;
-    }
-
-    if (/^<h([1-6])[^>]*>(.*?)<\/h[1-6]>$/i.test(line)) {
-      const match = line.match(/^<h([1-6])[^>]*>(.*?)<\/h[1-6]>$/i);
-      if (match) {
-        const level = parseInt(match[1]);
-        const content = match[2];
-        children.push(createHeading(content, level));
-      }
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('<p>')) {
-      const match = line.match(/^<p[^>]*>(.*?)<\/p>$/i);
-      if (match) {
-        const content = match[1];
-        if (content.includes('page-break')) {
-          children.push(new Paragraph({
-            children: [new PageBreak()],
-          }));
-        } else {
-          children.push(new Paragraph({
-            children: parseInlineMarkdown(content),
-            spacing: { after: 120 },
-          }));
-        }
-      }
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('<ul>') || line.startsWith('<ol>')) {
-      const { items, endIndex } = extractList(lines, i);
-      children.push(...createList(items, line.startsWith('<ol>')));
-      i = endIndex + 1;
-      continue;
-    }
-
-    if (line.startsWith('<table>')) {
-      const { table, endIndex } = extractTable(lines, i);
-      if (table) {
-        children.push(table);
-      }
-      i = endIndex + 1;
-      continue;
-    }
-
-    if (line.startsWith('<blockquote>')) {
-      const { content, endIndex } = extractBlockquote(lines, i);
-      children.push(new Paragraph({
-        style: 'Quote',
-        children: parseInlineMarkdown(content),
-        spacing: { after: 120 },
-      }));
-      i = endIndex + 1;
-      continue;
-    }
-
-    if (line.startsWith('<pre>') || line.startsWith('<code>')) {
-      const { content, endIndex } = extractCodeBlock(lines, i);
-      children.push(new Paragraph({
-        style: 'CodeBlock',
-        children: [new TextRun({
-          text: content,
-          font: 'Consolas',
-          size: 18,
-          color: '333333',
-        })],
-        spacing: { after: 120 },
-      }));
-      i = endIndex + 1;
-      continue;
-    }
-
-    if (line.startsWith('<hr') || line === '<hr>') {
-      children.push(new Paragraph({
-        children: [new TextRun({
-          text: '\u2500'.repeat(50),
-          color: 'CCCCCC',
-        })],
-        spacing: { after: 120 },
-      }));
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('<img')) {
-      const srcMatch = line.match(/src="([^"]+)"/);
-      const altMatch = line.match(/alt="([^"]*)"/);
-      if (srcMatch) {
-        children.push(createImageParagraph(srcMatch[1], altMatch?.[1] || ''));
-      }
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('<div')) {
-      const content = line.replace(/<div[^>]*>/, '').replace(/<\/div>$/, '');
-      if (content.trim()) {
-        children.push(new Paragraph({
-          children: parseInlineMarkdown(content),
-          spacing: { after: 120 },
-        }));
-      }
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('<br') || line === '<br>' || line === '<br/>') {
-      children.push(new Paragraph({
-        children: [],
-        spacing: { after: 60 },
-      }));
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('<') && !line.startsWith('</')) {
-      const tagMatch = line.match(/^<(\w+)/);
-      if (tagMatch) {
-        const tagName = tagMatch[1];
-        const content = line.replace(new RegExp(`^<${tagName}[^>]*>|<\/${tagName}>$`, 'gi'), '');
-        if (content.trim()) {
-          children.push(new Paragraph({
-            children: parseInlineMarkdown(content),
-            spacing: { after: 120 },
-          }));
-        }
-      }
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('#')) {
-      const match = line.match(/^(#{1,6})\s+(.+)$/);
-      if (match) {
-        const level = match[1].length;
-        const content = match[2];
-        children.push(createHeading(content, level));
-      }
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('- ') || line.startsWith('* ') || /^\d+\.\s/.test(line)) {
-      const { items, endIndex } = extractMarkdownList(lines, i);
-      const isOrdered = /^\d+\.\s/.test(line);
-      children.push(...createList(items, isOrdered));
-      i = endIndex + 1;
-      continue;
-    }
-
-    if (line.startsWith('> ')) {
-      const content = line.substring(2);
-      children.push(new Paragraph({
-        style: 'Quote',
-        children: parseInlineMarkdown(content),
-        spacing: { after: 120 },
-      }));
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('```')) {
-      const { content, endIndex } = extractFencedCode(lines, i);
-      children.push(new Paragraph({
-        style: 'CodeBlock',
-        children: content.split('\n').map((line) =>
-          new TextRun({
-            text: line,
-            font: 'Consolas',
-            size: 18,
-            color: '333333',
-          })
-        ),
-        spacing: { after: 120 },
-      }));
-      i = endIndex + 1;
-      continue;
-    }
-
-    if (line.startsWith('---') || line.startsWith('***') || line.startsWith('___')) {
-      children.push(new Paragraph({
-        children: [new TextRun({
-          text: '\u2500'.repeat(50),
-          color: 'CCCCCC',
-        })],
-        spacing: { after: 120 },
-      }));
-      i++;
-      continue;
-    }
-
-    children.push(new Paragraph({
-      children: parseInlineMarkdown(line),
-      spacing: { after: 120 },
-    }));
-    i++;
+  if (!result || result.trim().length === 0) {
+    console.log('[Export DOCX] getHtmlContent - HTML is empty after cleaning, using fallback');
+    return '<p>Content was empty after processing</p>';
   }
 
-  return children;
+  return result;
 }
 
-function extractList(lines: string[], startIndex: number): { items: string[]; endIndex: number } {
-  const items: string[] = [];
-  let i = startIndex;
-  let inList = true;
+function removeUnsupportedElements(el: HTMLElement): void {
+  const unsupportedSelectors = [
+    '.md-print-anchor',
+    '.blockid',
+    'script',
+    'style',
+    'svg',
+    'canvas',
+    'video',
+    'audio',
+    'iframe',
+    'object',
+    'embed',
+    'details',
+    'summary',
+    'dialog',
+    'template',
+    'math',
+    'mjx-container',
+    '[class*="math"]',
+    '[class*="katex"]',
+    '[class*="mermaid"]',
+    '.callout',
+    '.callout-content',
+    '.callout-icon',
+    '.callout-title',
+    '.markdown-embed',
+    '.file-embed',
+    '.internal-embed',
+    '.footnotes',
+    '.footnote-ref',
+    '.footnote-backref',
+    'a.tag',
+    'span.cm-hashtag',
+    '.metadata-container',
+    '.metadata-properties',
+    '.property',
+    '[data-line]',
+    '.cm-line',
+    '.source',
+    '.code-block-flair',
+    '.edit-block-button',
+    '.collapse-indicator',
+    '.heading-collapse-indicator',
+    '.collapse-icon',
+    '.list-bullet',
+    '.list-marker',
+    '.task-list-item-checkbox',
+    'input[type="checkbox"]',
+    '.search-result',
+    '.highlight',
+    'mark',
+    '.obsidian-search-match-highlight',
+  ];
 
-  while (i < lines.length && inList) {
-    const line = lines[i].trim();
-
-    if (line.startsWith('<li>')) {
-      const match = line.match(/^<li[^>]*>(.*?)<\/li>$/i);
-      if (match) {
-        items.push(match[1]);
-      }
-      i++;
-    } else if (line.startsWith('</ul>') || line.startsWith('</ol>')) {
-      inList = false;
-      i++;
-    } else {
-      i++;
+  unsupportedSelectors.forEach((selector) => {
+    try {
+      const elements = el.querySelectorAll(selector);
+      elements.forEach((e: Element) => e.remove());
+    } catch (e) {
     }
-  }
-
-  return { items, endIndex: i - 1 };
+  });
 }
 
-function createList(items: string[], isOrdered: boolean): Paragraph[] {
-  return items.map((item, index) => {
-    const prefix = isOrdered ? `${index + 1}. ` : '\u2022 ';
-    return new Paragraph({
-      children: [
-        new TextRun({
-          text: prefix,
-          bold: isOrdered,
-        }),
-        ...parseInlineMarkdown(item),
-      ],
-      indent: {
-        left: convertMillimetersToTwip(10),
-        hanging: convertMillimetersToTwip(5),
-      },
-      spacing: { after: 60 },
+function cleanAttributes(el: HTMLElement): void {
+  const allElements = el.querySelectorAll('*');
+  allElements.forEach((node) => {
+    const elem = node as HTMLElement;
+    const attrs = Array.from(elem.attributes);
+    attrs.forEach((attr) => {
+      const name = attr.name.toLowerCase();
+      if (
+        name !== 'href' &&
+        name !== 'src' &&
+        name !== 'alt' &&
+        name !== 'title' &&
+        name !== 'colspan' &&
+        name !== 'rowspan' &&
+        name !== 'width' &&
+        name !== 'height' &&
+        name !== 'align' &&
+        name !== 'valign' &&
+        name !== 'style' &&
+        name !== 'class' &&
+        name !== 'id' &&
+        name !== 'type' &&
+        name !== 'start' &&
+        name !== 'reversed' &&
+        name !== 'lang' &&
+        name !== 'dir' &&
+        name !== 'abbr' &&
+        name !== 'axis' &&
+        name !== 'headers' &&
+        name !== 'scope' &&
+        name !== 'span' &&
+        name !== 'cite' &&
+        name !== 'datetime' &&
+        name !== 'hreflang' &&
+        name !== 'media' &&
+        name !== 'rel' &&
+        name !== 'target'
+      ) {
+        elem.removeAttribute(attr.name);
+      }
+    });
+
+    if (elem.style) {
+      const cssText = elem.getAttribute('style') || '';
+      const allowedProperties = [
+        'color',
+        'background-color',
+        'background',
+        'font-size',
+        'font-weight',
+        'font-style',
+        'font-family',
+        'text-align',
+        'text-decoration',
+        'text-transform',
+        'text-indent',
+        'line-height',
+        'margin',
+        'margin-top',
+        'margin-bottom',
+        'margin-left',
+        'margin-right',
+        'padding',
+        'padding-top',
+        'padding-bottom',
+        'padding-left',
+        'padding-right',
+        'border',
+        'border-top',
+        'border-bottom',
+        'border-left',
+        'border-right',
+        'border-color',
+        'border-style',
+        'border-width',
+        'width',
+        'height',
+        'max-width',
+        'min-width',
+        'display',
+        'position',
+        'top',
+        'left',
+        'right',
+        'bottom',
+        'float',
+        'clear',
+        'vertical-align',
+        'white-space',
+        'word-wrap',
+        'word-break',
+        'overflow',
+        'list-style-type',
+        'list-style-position',
+        'list-style-image',
+        'opacity',
+        'visibility',
+        'z-index',
+        'box-sizing',
+        'outline',
+        'cursor',
+        'pointer-events',
+        'user-select',
+        'resize',
+        'zoom',
+        'page-break-before',
+        'page-break-after',
+        'page-break-inside',
+        'break-before',
+        'break-after',
+        'break-inside',
+      ];
+
+      const filteredStyles = cssText
+        .split(';')
+        .filter((style) => {
+          const prop = style.split(':')[0]?.trim().toLowerCase();
+          return prop && allowedProperties.includes(prop);
+        })
+        .join(';');
+
+      if (filteredStyles) {
+        elem.setAttribute('style', filteredStyles);
+      } else {
+        elem.removeAttribute('style');
+      }
+    }
+  });
+}
+
+function fixInternalLinks(el: HTMLElement): void {
+  const links = el.querySelectorAll('a.internal-link');
+  links.forEach((link) => {
+    const a = link as HTMLAnchorElement;
+    a.removeAttribute('href');
+    a.removeAttribute('class');
+  });
+}
+
+function fixImages(el: HTMLElement): void {
+  const images = el.querySelectorAll('img');
+  images.forEach((img) => {
+    const image = img as HTMLImageElement;
+    const src = image.getAttribute('src');
+    if (!src || src.trim().length === 0) {
+      image.remove();
+      return;
+    }
+
+    if (src.startsWith('app://') || src.startsWith('file://') || src.startsWith('obsidian://')) {
+      const alt = image.getAttribute('alt') || 'Image';
+      const p = el.ownerDocument.createElement('p');
+      p.textContent = `[Image: ${alt}]`;
+      p.setAttribute('style', 'font-style: italic; color: #666;');
+      image.replaceWith(p);
+      return;
+    }
+
+    image.removeAttribute('loading');
+    image.removeAttribute('draggable');
+    image.removeAttribute('class');
+
+    if (!image.hasAttribute('alt')) {
+      image.setAttribute('alt', '');
+    }
+  });
+}
+
+function fixTables(el: HTMLElement): void {
+  const tables = el.querySelectorAll('table');
+  tables.forEach((table) => {
+    const t = table as HTMLTableElement;
+    t.removeAttribute('class');
+
+    const ths = t.querySelectorAll('th');
+    ths.forEach((th) => {
+      th.removeAttribute('class');
+      th.removeAttribute('style');
+    });
+
+    const tds = t.querySelectorAll('td');
+    tds.forEach((td) => {
+      td.removeAttribute('class');
+      td.removeAttribute('style');
+    });
+
+    const trs = t.querySelectorAll('tr');
+    trs.forEach((tr) => {
+      tr.removeAttribute('class');
+      tr.removeAttribute('style');
     });
   });
 }
 
-function extractTable(lines: string[], startIndex: number): { table: Table | null; endIndex: number } {
-  let i = startIndex;
-  let inTable = true;
-  const rows: string[][] = [];
-  let currentRow: string[] = [];
-  let isHeaderRow = false;
+function removeEmptyElements(el: HTMLElement): void {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const allElements = el.querySelectorAll('*');
+    allElements.forEach((node) => {
+      const elem = node as HTMLElement;
+      const tagName = elem.tagName.toLowerCase();
+      const voidElements = ['br', 'hr', 'img', 'input', 'col', 'area', 'base', 'embed', 'link', 'meta', 'param', 'source', 'track', 'wbr'];
 
-  while (i < lines.length && inTable) {
-    const line = lines[i].trim();
-
-    if (line.startsWith('<tr>')) {
-      currentRow = [];
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('<th')) {
-      const match = line.match(/^<th[^>]*>(.*?)<\/th>$/i);
-      if (match) {
-        currentRow.push(match[1]);
+      if (voidElements.includes(tagName)) {
+        return;
       }
-      isHeaderRow = true;
-      i++;
-      continue;
-    }
 
-    if (line.startsWith('<td')) {
-      const match = line.match(/^<td[^>]*>(.*?)<\/td>$/i);
-      if (match) {
-        currentRow.push(match[1]);
-      }
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('</tr>')) {
-      if (currentRow.length > 0) {
-        rows.push([...currentRow]);
-      }
-      currentRow = [];
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('</table>')) {
-      inTable = false;
-      i++;
-      continue;
-    }
-
-    i++;
-  }
-
-  if (rows.length === 0) {
-    return { table: null, endIndex: i - 1 };
-  }
-
-  const tableRows = rows.map((row, rowIndex) => {
-    const cells = row.map((cell) => {
-      const isHeader = rowIndex === 0 && isHeaderRow;
-      return new TableCell({
-        children: [
-          new Paragraph({
-            children: parseInlineMarkdown(cell),
-            alignment: AlignmentType.LEFT,
-          }),
-        ],
-        shading: {
-          fill: isHeader ? 'D9E2F3' : 'FFFFFF',
-        },
-      });
-    });
-
-    return new TableRow({
-      children: cells,
-      tableHeader: rowIndex === 0 && isHeaderRow,
-    });
-  });
-
-  const table = new Table({
-    rows: tableRows,
-    width: {
-      size: 100,
-      type: WidthType.PERCENTAGE,
-    },
-  });
-
-  return { table, endIndex: i - 1 };
-}
-
-function extractBlockquote(lines: string[], startIndex: number): { content: string; endIndex: number } {
-  let i = startIndex;
-  const contentParts: string[] = [];
-
-  while (i < lines.length) {
-    const line = lines[i].trim();
-    if (line.startsWith('<blockquote>')) {
-      const match = line.match(/^<blockquote[^>]*>(.*?)<\/blockquote>$/i);
-      if (match) {
-        contentParts.push(match[1]);
-        i++;
-        break;
-      }
-    }
-    if (line.startsWith('</blockquote>')) {
-      i++;
-      break;
-    }
-    contentParts.push(line);
-    i++;
-  }
-
-  return { content: contentParts.join(' '), endIndex: i - 1 };
-}
-
-function extractCodeBlock(lines: string[], startIndex: number): { content: string; endIndex: number } {
-  let i = startIndex;
-  const contentParts: string[] = [];
-
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.startsWith('<pre>') || line.startsWith('<code>')) {
-      const match = line.match(/^<(?:pre|code)[^>]*>(.*?)<\/(?:pre|code)>$/i);
-      if (match) {
-        contentParts.push(match[1]);
-        i++;
-        if (match[0].includes('</pre>') || match[0].includes('</code>')) {
-          break;
+      if (elem.childNodes.length === 0 && !voidElements.includes(tagName)) {
+        if (tagName === 'p' || tagName === 'div' || tagName === 'span' || tagName === 'li' || tagName === 'td' || tagName === 'th') {
+          elem.remove();
+          changed = true;
         }
-        continue;
       }
-    }
-    if (line.startsWith('</pre>') || line.startsWith('</code>')) {
-      i++;
-      break;
-    }
-    contentParts.push(line);
-    i++;
-  }
-
-  return { content: contentParts.join('\n'), endIndex: i - 1 };
-}
-
-function extractFencedCode(lines: string[], startIndex: number): { content: string; endIndex: number } {
-  let i = startIndex;
-  const contentParts: string[] = [];
-
-  i++;
-
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.startsWith('```')) {
-      i++;
-      break;
-    }
-    contentParts.push(line);
-    i++;
-  }
-
-  return { content: contentParts.join('\n'), endIndex: i - 1 };
-}
-
-function extractMarkdownList(lines: string[], startIndex: number): { items: string[]; endIndex: number } {
-  const items: string[] = [];
-  let i = startIndex;
-
-  while (i < lines.length) {
-    const line = lines[i].trim();
-
-    if (/^[-*]\s/.test(line)) {
-      items.push(line.replace(/^[-*]\s/, ''));
-      i++;
-    } else if (/^\d+\.\s/.test(line)) {
-      items.push(line.replace(/^\d+\.\s/, ''));
-      i++;
-    } else {
-      break;
-    }
-  }
-
-  return { items, endIndex: i - 1 };
-}
-
-function createHeading(content: string, level: number): Paragraph {
-  const headingMap: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
-    1: HeadingLevel.HEADING_1,
-    2: HeadingLevel.HEADING_2,
-    3: HeadingLevel.HEADING_3,
-    4: HeadingLevel.HEADING_4,
-    5: HeadingLevel.HEADING_5,
-    6: HeadingLevel.HEADING_6,
-  };
-
-  return new Paragraph({
-    heading: headingMap[level] || HeadingLevel.HEADING_1,
-    children: parseInlineMarkdown(content),
-  });
-}
-
-function parseInlineMarkdown(text: string): (TextRun | ExternalHyperlink)[] {
-  const runs: (TextRun | ExternalHyperlink)[] = [];
-  let remaining = text;
-
-  while (remaining.length > 0) {
-    const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
-    const italicMatch = remaining.match(/\*(.+?)\*/);
-    const codeMatch = remaining.match(/`(.+?)`/);
-    const linkMatch = remaining.match(/\[(.+?)\]\((.+?)\)/);
-    const strikeMatch = remaining.match(/~~(.+?)~~/);
-    const highlightMatch = remaining.match(/==(.+?)==/);
-
-    const matches = [boldMatch, italicMatch, codeMatch, linkMatch, strikeMatch, highlightMatch].filter(Boolean);
-
-    if (matches.length === 0) {
-      runs.push(new TextRun({ text: remaining }));
-      break;
-    }
-
-    let earliestMatch: RegExpMatchArray | null = null;
-    let earliestIndex = remaining.length;
-
-    for (const match of matches) {
-      if (match && match.index !== undefined && match.index < earliestIndex) {
-        earliestMatch = match;
-        earliestIndex = match.index;
-      }
-    }
-
-    if (earliestMatch) {
-      if (earliestIndex > 0) {
-        runs.push(new TextRun({ text: remaining.substring(0, earliestIndex) }));
-      }
-
-      const fullMatch = earliestMatch[0];
-      const capture = earliestMatch[1];
-      const matchIndex = earliestIndex;
-
-      if (fullMatch.startsWith('**') && fullMatch.endsWith('**')) {
-        runs.push(new TextRun({ text: capture, bold: true }));
-      } else if (fullMatch.startsWith('*') && fullMatch.endsWith('*')) {
-        runs.push(new TextRun({ text: capture, italics: true }));
-      } else if (fullMatch.startsWith('`') && fullMatch.endsWith('`')) {
-        runs.push(new TextRun({ text: capture, font: 'Consolas', size: 18 }));
-      } else if (fullMatch.startsWith('[') && fullMatch.includes('](')) {
-        const urlMatch = fullMatch.match(/\[(.+?)\]\((.+?)\)/);
-        if (urlMatch) {
-          runs.push(new ExternalHyperlink({
-            children: [new TextRun({ text: urlMatch[1], style: 'Hyperlink' })],
-            link: urlMatch[2],
-          }));
-        }
-      } else if (fullMatch.startsWith('~~') && fullMatch.endsWith('~~')) {
-        runs.push(new TextRun({ text: capture, strike: true }));
-      } else if (fullMatch.startsWith('==') && fullMatch.endsWith('==')) {
-        runs.push(new TextRun({ text: capture, highlight: 'yellow' }));
-      }
-
-      remaining = remaining.substring(matchIndex + fullMatch.length);
-    } else {
-      runs.push(new TextRun({ text: remaining }));
-      break;
-    }
-  }
-
-  return runs;
-}
-
-function createImageParagraph(src: string, alt: string): Paragraph {
-  try {
-    if (src.startsWith('data:image')) {
-      const match = src.match(/^data:image\/(\w+);base64,(.+)$/);
-      if (match) {
-        const buffer = Buffer.from(match[2], 'base64');
-        const format = match[1].toUpperCase();
-        const imageType = format === 'PNG' ? 'png' : (format === 'JPEG' || format === 'JPG') ? 'jpg' : 'png';
-        return new Paragraph({
-          children: [
-            new ImageRun({
-              type: imageType,
-              data: buffer,
-              transformation: {
-                width: 400,
-                height: 300,
-              },
-            }),
-          ],
-          spacing: { after: 120 },
-        });
-      }
-    }
-
-    return new Paragraph({
-      children: [
-        new TextRun({
-          text: `[Image: ${alt || src}]`,
-          italics: true,
-          color: '666666',
-        }),
-      ],
-      spacing: { after: 120 },
-    });
-  } catch (e) {
-    return new Paragraph({
-      children: [
-        new TextRun({
-          text: `[Image: ${alt || src}]`,
-          italics: true,
-          color: '666666',
-        }),
-      ],
-      spacing: { after: 120 },
     });
   }
 }
 
-function getPageSize(config: DocxConfig): { pageSize: { width: number; height: number }; orientation: (typeof PageOrientation)[keyof typeof PageOrientation] } {
+function getPageSize(config: DocxConfig): { pageSize: { width: number; height: number }; orientation: 'portrait' | 'landscape' } {
   let width: number;
   let height: number;
 
@@ -894,33 +426,29 @@ function getPageSize(config: DocxConfig): { pageSize: { width: number; height: n
   }
 
   return {
-    pageSize: {
-      width: convertMillimetersToTwip(width),
-      height: convertMillimetersToTwip(height),
-    },
-    orientation: config.landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT,
+    pageSize: { width: width * 1440 / 25.4, height: height * 1440 / 25.4 },
+    orientation: config.landscape ? 'landscape' : 'portrait'
   };
 }
 
-function getMargins(config: DocxConfig): { top: number; bottom: number; left: number; right: number; header: number; footer: number } {
-  const mmToTwip = (mm: number) => convertMillimetersToTwip(mm);
-
+function getMargins(config: DocxConfig): { top: number; bottom: number; left: number; right: number; header: number; footer: number; gutter: number } {
   if (config.marginType === '0') {
-    return { top: 0, bottom: 0, left: 0, right: 0, header: 0, footer: 0 };
+    return { top: 0, bottom: 0, left: 0, right: 0, header: 0, footer: 0, gutter: 0 };
   } else if (config.marginType === '1') {
-    const defaultMargin = mmToTwip(25.4);
-    return { top: defaultMargin, bottom: defaultMargin, left: defaultMargin, right: defaultMargin, header: mmToTwip(12.7), footer: mmToTwip(12.7) };
+    const defaultMargin = 1440;
+    return { top: defaultMargin, bottom: defaultMargin, left: defaultMargin, right: defaultMargin, header: 720, footer: 720, gutter: 0 };
   } else if (config.marginType === '2') {
-    const smallMargin = mmToTwip(12.7);
-    return { top: smallMargin, bottom: smallMargin, left: smallMargin, right: smallMargin, header: mmToTwip(6.35), footer: mmToTwip(6.35) };
+    const smallMargin = 720;
+    return { top: smallMargin, bottom: smallMargin, left: smallMargin, right: smallMargin, header: 360, footer: 360, gutter: 0 };
   } else {
     return {
-      top: mmToTwip(safeParseFloat(config.marginTop, 25.4)),
-      bottom: mmToTwip(safeParseFloat(config.marginBottom, 25.4)),
-      left: mmToTwip(safeParseFloat(config.marginLeft, 25.4)),
-      right: mmToTwip(safeParseFloat(config.marginRight, 25.4)),
-      header: mmToTwip(12.7),
-      footer: mmToTwip(12.7),
+      top: safeParseFloat(config.marginTop, 10) * 1440 / 25.4,
+      bottom: safeParseFloat(config.marginBottom, 10) * 1440 / 25.4,
+      left: safeParseFloat(config.marginLeft, 10) * 1440 / 25.4,
+      right: safeParseFloat(config.marginRight, 10) * 1440 / 25.4,
+      header: 720,
+      footer: 720,
+      gutter: 0
     };
   }
 }
