@@ -15,7 +15,7 @@ import Progress from './Progress.svelte';
 declare const electron: any;
 
 function fullWidthButton(button: any) {
-  button.buttonEl.setAttribute('style', `margin: "0 auto"; width: -webkit-fill-available`);
+  button.buttonEl.setAttribute('style', `margin: 0 auto; width: -webkit-fill-available`);
 }
 
 function setInputWidth(inputEl: HTMLElement) {
@@ -53,7 +53,7 @@ export class ExportConfigModal extends Modal {
       marginLeft: '10',
       marginRight: '10',
       displayHeader: plugin.settings.displayHeader ?? true,
-      displayFooter: plugin.settings.displayHeader ?? true,
+      displayFooter: plugin.settings.displayFooter ?? true,
       cssSnippet: '0',
       ...(plugin.settings.prevConfig ?? {})
     };
@@ -317,14 +317,6 @@ export class ExportConfigModal extends Modal {
 
     const contentEl = wrapper.createDiv({ attr: { class: 'setting-wrapper' } });
 
-    contentEl.addEventListener('keyup', (event) => {
-      if ((event as KeyboardEvent).key === 'Enter') {
-        handleExport();
-      }
-    });
-
-    this.generateForm(contentEl);
-
     const handleExport = async () => {
       this.plugin.settings.prevConfig = this.config;
       await this.plugin.saveSettings();
@@ -387,6 +379,14 @@ export class ExportConfigModal extends Modal {
         }
       }
     };
+
+    contentEl.addEventListener('keyup', (event) => {
+      if ((event as KeyboardEvent).key === 'Enter') {
+        handleExport();
+      }
+    });
+
+    this.generateForm(contentEl);
 
     new Setting(contentEl).setHeading().addButton((button) => {
       button.setButtonText('Export').onClick(handleExport);

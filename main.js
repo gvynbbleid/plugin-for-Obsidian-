@@ -55512,7 +55512,7 @@ function Progress($$anchor, $$props) {
 
 // src/modal.ts
 function fullWidthButton(button) {
-  button.buttonEl.setAttribute("style", `margin: "0 auto"; width: -webkit-fill-available`);
+  button.buttonEl.setAttribute("style", `margin: 0 auto; width: -webkit-fill-available`);
 }
 function setInputWidth(inputEl) {
   inputEl.setAttribute("style", `width: 100px;`);
@@ -55540,7 +55540,7 @@ var ExportConfigModal = class extends import_obsidian3.Modal {
       marginLeft: "10",
       marginRight: "10",
       displayHeader: (_b3 = plugin.settings.displayHeader) != null ? _b3 : true,
-      displayFooter: (_c2 = plugin.settings.displayHeader) != null ? _c2 : true,
+      displayFooter: (_c2 = plugin.settings.displayFooter) != null ? _c2 : true,
       cssSnippet: "0",
       ...(_d = plugin.settings.prevConfig) != null ? _d : {}
     };
@@ -55767,12 +55767,6 @@ ${this.px2mm(width)}x${this.px2mm(height)}mm`;
       this.togglePrintSize();
     });
     const contentEl = wrapper.createDiv({ attr: { class: "setting-wrapper" } });
-    contentEl.addEventListener("keyup", (event2) => {
-      if (event2.key === "Enter") {
-        handleExport();
-      }
-    });
-    this.generateForm(contentEl);
     const handleExport = async () => {
       var _a5, _b3;
       this.plugin.settings.prevConfig = this.config;
@@ -55829,6 +55823,12 @@ ${this.px2mm(width)}x${this.px2mm(height)}mm`;
         }
       }
     };
+    contentEl.addEventListener("keyup", (event2) => {
+      if (event2.key === "Enter") {
+        handleExport();
+      }
+    });
+    this.generateForm(contentEl);
     new import_obsidian3.Setting(contentEl).setHeading().addButton((button) => {
       button.setButtonText("Export").onClick(handleExport);
       button.setCta();
